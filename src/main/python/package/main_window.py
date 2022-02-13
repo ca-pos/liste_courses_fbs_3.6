@@ -1,7 +1,7 @@
 from PySide2 import QtWidgets
 
-# pour une fenêtre plus complexe utiliser
-# class MainWindow(QtWidgets.QMainWindow):
+# pour une fenêtre plus simple utiliser
+# class MainWindow(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()

@@ -2,17 +2,19 @@ import re
 import tinydb.table
 from tinydb import TinyDB, where, Query
 
-from package.api.constants import DIR_LIST, PAST_LIST
+from package.api.constants import *
 
 
 class Produit:
     db_list = TinyDB(DIR_LIST, indent=4, ensure_ascii=False)
     db_past = TinyDB(PAST_LIST, indent=4, ensure_ascii=False)
 
-    def __init__(self, item: str, magasin: str = "", rayon: str = "") -> None:
+    def __init__(self, item: str, magasin: str = "", rayon: str = "", save_in_past: bool = True) -> None:
         self.item = self._normalize(item)
         self.magasin = self._normalize(magasin)
         self.rayon = self._normalize(rayon)
+
+        self.save_in_past = save_in_past
 
     def _normalize(self, regex):
         regex = re.sub(r"^(\s*\b)((\w* *\b)+)(\ *)$", r"\2", regex, re.LOCALE)
@@ -23,7 +25,7 @@ class Produit:
         return f"{self.item}, {self.magasin}, {self.rayon}"
 
     def __repr__(self) -> str:
-        return f"Produit({self.item})"
+        return f'Produit("{self.item}", "{self.magasin}", "{self.rayon}")'
 
     # GETTERS & SETTERS
 
@@ -53,33 +55,41 @@ class Produit:
 
     # OBJECT METHODS
 
-    @property
-    def db_exact_instance(self):
+    def db_exact_instance(self, in_list: bool = True):
         """
-        Return the object whose items match those of  self.item
+        Return the objects whose item field match those of  self.item in list
+        if in_list is true, in past otherwise
 
-        Returns: tinydb_list.table.Document
+        Returns: tinydb_list.table.Document, None if none
         """
-        return (Produit.db_list.get((where("item") == self.item) &
+        if in_list:
+            return (Produit.db_list.get((where("item") == self.item) &
+                                   (where("magasin") == self.magasin) &
+                                   (where("rayon") == self.rayon)))
+        else:
+            return (Produit.db_past.get((where("item") == self.item) &
                                    (where("magasin") == self.magasin) &
                                    (where("rayon") == self.rayon)))
 
-    @property
-    def db_instance(self) -> tinydb.table.Document:
+    def db_instance(self, in_list: bool = True) -> tinydb.table.Document:
         """
-        Return the object whose item field equals self.item
+        Return the objects whose item field match self.item in list
+        if in_list is true, in past otherwise
 
-        Returns: tinydb_list.table.Document
+        Returns: tinydb_list.table.Document, None if none
         """
-        return Produit.db_list.get(where("item") == self.item)
+        if in_list:
+            return Produit.db_list.get(where("item") == self.item)
+        else:
+            return Produit.db_past.get(where("item") == self.item)
 
-    def exists_in_list(self):
+    def exists_in_list(self, in_list: bool = True):
         """
-        Test if the object whose item field is self.item exists
+        Test if the object whose item field is self.item exists in the list
 
         Returns: bool: True if object exists, False otherwise
         """
-        return bool(self.db_instance)
+        return bool(self.db_instance(in_list=in_list))
 
     def exists_in_past(self) -> bool:
         """
@@ -89,18 +99,49 @@ class Produit:
         """
         return bool(Produit.db_past.get(where("item") == self.item))
 
-    def save(self) -> int:
+    def is_same(self, p) -> bool:
+        """
+        Test p is exactly the same as self (item, magasin and rayon)
+        Args:
+            p (): an object of class Produit
+
+        Returns:
+            True if p is the same as self, False otherwise
+        """
+        if (self.item == p.item) and (self.magasin == p.magasin) and (self.rayon == p.rayon):
+            return True
+        return False
+
+    def save(self, force: bool = False) -> list:
         """
         Add the item self in db_list if it is not yet present
 
         Returns: int: id of the added item, -1 if item already in list
         """
-        if self.exists_in_list():
-            return -1
-        # print(Produit.db_list.insert(self.__dict__))
-        # # l'utilisation de __dict__ semble incompatible avec les setters/getters, d'où le recours à tmp ci-dessous
+        # TODO: above docstring to be rewritten
+        # l'utilisation de __dict__ semble incompatible avec les setters/getters,
+        # d'où le recours à tmp ci-dessous
         tmp = {"item": self.item, "magasin": self.magasin, "rayon": self.rayon}
-        return Produit.db_list.insert(tmp)
+        return_code = ["", ""]
+        print('>', self.item)
+        if self.item == "":
+            return return_code
+        if self.db_exact_instance():
+            return_code[0] = "ALREADY_IN_LIST"
+        else:
+            if (self.exists_in_list()) and not force:
+                return_code[0] = "EQUIV_IN_LIST"
+            else:
+                return_code[0] = Produit.db_list.insert(tmp)
+        if not self.db_exact_instance(False):
+            if self.save_in_past:
+                return_code[1] = Produit.db_past.insert(tmp)
+            else:
+                return_code[1] = "NOT_SAVED_IN_PAST"
+        else:
+            return_code[1] = "ALREADY_IN_LIST"
+
+        return return_code
 
     def supprimer(self):
         """
@@ -109,7 +150,7 @@ class Produit:
         Returns: list: id of the removed item
         """
         if self.exists_in_list():
-            return Produit.db_list.remove(doc_ids=[self.db_exact_instance.doc_id])
+            return Produit.db_list.remove(doc_ids=[self.db_exact_instance().doc_id])
         return []
 
 
@@ -125,11 +166,11 @@ def _get_past_items():
 
 # CLASS METHODS
 
-def full_list_by_items():
+def full_list_by_items(in_list: bool = True):
     list_ = list()
     l = liste_items()
     for i in range(len(l)):
-        articles = look_for_items(l[i])
+        articles = look_for_items(l[i], in_list=in_list)
         list_.extend(articles)
     return list_
 
@@ -159,9 +200,12 @@ def liste_magasins() -> list:
     return sorted(list({item.magasin for item in _get_all_items()}))
 
 
-def look_for_items(item: str):
+def look_for_items(item: str, in_list: bool = True):
     look = Query()
-    return Produit.db_list.search(look.item == item)
+    if in_list:
+        return Produit.db_list.search(look.item == item)
+    return Produit.db_past.search(look.item == item)
+
 
 # =============================================================================================================================
 # =============================================================================================================================
@@ -169,7 +213,12 @@ def look_for_items(item: str):
 
 if __name__ == "__main__":
     pass
-    full_list_by_items()
+    # e = Produit("jouets", "Joué Club", "", save_in_past=False)
+    # print(e.save())
+    # print(Produit("piles", "bricomarché", "électricité").save(force=True))
+
+    # print(full_list_by_items(False))
+    # print(full_list_by_items())
 
     # q = Produit('brosse à dent', 'inter', 'hygiène')
     # q.save()

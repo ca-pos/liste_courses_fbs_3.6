@@ -1,9 +1,11 @@
 from tinydb import Query
 
-from package.api.produit import Produit, full_list_by_stores, full_list_by_items
+from package.api.produit import Produit, full_list_by_stores
+from package.api.produit import full_list_by_items, look_for_items
 
 class bcolors:
     # TODO: does not work with windows, see colorama extension
+    # TODO: move this to an utilities module
     OK = '\033[92m' #GREEN
     WARNING = '\033[93m' #YELLOW
     FAIL = '\033[91m' #RED
@@ -17,7 +19,7 @@ def add_article():
     item = input("Article : ")
     article = _get_article(item)
 
-    article.save()
+    print(article.save())
 
 
 def remove_article():
@@ -45,6 +47,7 @@ def remove_article():
         a = l[choix]
         return (Produit(**a)).supprimer()
 
+
 def show_list():
     list_ = full_list_by_stores()
     for key1, val1 in list_.items():
@@ -55,13 +58,22 @@ def show_list():
             for i in range(len(val2)):
                 print('\t+', bcolors.WARNING, val2[i], bcolors.RESET)
         print()
+    print(invert_archive_flag.archive)
+
+def invert_archive_flag():
+    invert_archive_flag.archive = not invert_archive_flag.archive
+    print()
+    if(invert_archive_flag.archive):
+        print(bcolors.WARNING, "Les nouveaux articles seront archivés", bcolors.RESET)
+    else:
+        print(bcolors.WARNING, "Les nouveaux articles ne seront plus archivés", bcolors.RESET)
 
 
 #         FONCTIONS PRIVÉES
 
 
 def _flat_list():
-    list_ = full_list()
+    list_ = full_list_by_items()
     res = []
     j = 0
     for key1, val1 in list_.items():
@@ -77,17 +89,19 @@ def _flat_list():
 
 def _get_article(item: str):
     article = Produit(item)
-    if article.exists_in_past():
-        look = Query()
-        articles = Produit.db_past.search(look.item == article.item)
+    if article.exists_in_list(False):
+        look_for_items(item=item, in_list=False)
+        # look_for_items(item=item, in_list=False)
         store = _proposals(articles, 'magasin')
         shelf = _proposals(articles, 'rayon')
     else:
         store = input('Magasin : ')
         shelf = input('Rayon : ')
 
-    article = Produit(item=item, magasin=store, rayon=shelf)
-    if article.db_exact_instance:
+    save = invert_archive_flag.archive
+    article = Produit(item=item, magasin=store, rayon=shelf, save_in_past=save)
+
+    if article.db_exact_instance():
         article = Produit("")
 
     return article

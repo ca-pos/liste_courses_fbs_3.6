@@ -1,1 +1,4 @@
 .idea/
+*.pyc
+constants.cpython-36.pyc
+

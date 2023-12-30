@@ -22,7 +22,7 @@ pyinstaller-hooks-contrib==2022.0
 pyparsing==3.0.7
 PySide2==5.15.2.1
 pytz==2021.3
-requests==2.27.1
+requests==2.31.0
 shiboken2==5.15.2.1
 shiboken6==6.2.3
 snowballstemmer==2.2.0
